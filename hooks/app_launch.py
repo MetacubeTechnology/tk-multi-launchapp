@@ -15,8 +15,11 @@ This hook is executed to launch the applications.
 """
 
 import os
+import re
 import sys
+import subprocess
 import tank
+from tank import TankError
 
 class AppLaunch(tank.Hook):
     """
@@ -54,14 +57,37 @@ class AppLaunch(tank.Hook):
             cmd = "open -n \"%s\"" % (app_path)
             if app_args:
                 cmd += " --args \"%s\"" % app_args.replace("\"", "\\\"")
-        
+
+
+        elif system == "win32" and self.parent.get_setting("engine") in ["tk-fusion"]:
+            # used to open only fusion in a very specific way
+            # we need to catch the process id from the begining
+            cmd = 'wmic process call create "%s" | find "ProcessId"' % (app_path)
+            fusion_command = subprocess.check_output(cmd, shell=True)
+
+            if "ProcessId" in fusion_command:
+                self.parent.log_debug ("Lauch output: " + str (fusion_command))
+                try:
+                    ProcessId = re.search ('[0-9]+', fusion_command).group()
+                except:
+                    raise TankError ("We cant parse the process id: %s" % fusion_command)
+
+                self.parent.log_debug ("Retrieved PID: " + str (ProcessId))
+                os.system (os.environ["SGTK_FUSION_BOOTSTRAP"] + " " + str (ProcessId))
+            else:
+                raise TankError (fusion_command)
+
         elif system == "win32":
             # on windows, we run the start command in order to avoid
             # any command shells popping up as part of the application launch.
             cmd = "start /B \"App\" \"%s\" %s" % (app_path, app_args)
 
         # run the command to launch the app
-        exit_code = os.system(cmd)
+        if self.parent.get_setting("engine") in ["tk-fusion"]:
+            self.parent.log_debug ("Overriding exit_code to 0")
+            exit_code = 0
+        else:
+            exit_code = os.system(cmd)
 
         return {
             "command": cmd,

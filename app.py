@@ -320,6 +320,8 @@ class LaunchApplication(tank.platform.Application):
                 self.prepare_mari_launch(engine_name, context)
             elif engine_name in ["tk-flame", "tk-flare"]:
                 (app_path, app_args) = self.prepare_flame_flare_launch(engine_name, context, app_path, app_args)
+            elif engine_name == "tk-fusion":
+                self.prepare_fusion_launch (context)
             else:
                 (app_path, app_args) = self.prepare_generic_launch(engine_name, context, app_path, app_args)
 
@@ -768,6 +770,37 @@ class LaunchApplication(tank.platform.Application):
         # add our startup path to the photoshop init path
         startup_path = os.path.abspath(os.path.join(self._get_app_specific_path("photoshop"), "startup"))
         tank.util.append_path_to_env_var("PYTHONPATH", startup_path)
+
+
+
+    def prepare_fusion_launch (self, context):
+        """
+        Fusion specific pre-launch environment setup.
+        """
+        engine_path = tank.platform.get_engine_path("tk-fusion", self.tank, context)
+        if engine_path is None:
+            raise TankError("Path to fusion engine (tk-fusion) could not be found.")
+
+        # if the fusion engine has the bootstrap logic with it, run it from there
+        startup_path = os.path.join(engine_path, "bootstrap")
+
+        env_setup = os.path.join(startup_path, "fusion_environment_setup.py")
+
+        if os.path.exists(env_setup):
+            sys.path.append(startup_path)
+            try:
+                import fusion_environment_setup
+                fusion_environment_setup.setup(self, context)
+            except:
+                import traceback
+                error = traceback.format_exc()
+                self.log_exception("Error executing engine bootstrap script: \n%s" % error)
+                raise TankError("Error executing bootstrap script. Please see log for details.")
+
+            return
+        else:
+            self.log_exception("We can't find fusion_environment_setup script: %s" % env_setup)
+            raise TankError("Error executing environment_setup script. Please see log for details.")
 
 
     def _get_app_specific_path(self, app_dir):
